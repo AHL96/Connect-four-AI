@@ -6,19 +6,29 @@ enum Piece {
 }
 
 class Game {
-    private _board: Array<Piece>;
-    private _width: number = 10;
-    private _height: number = 8;
+    private _board: Array<Piece> = [];
+    private _width: number = 7;
+    private _height: number = 6;
     private _turn: boolean = true;
 
-    constructor() {
-        this._board = [];
-        for (let i: number = 0; i < this._width * this._height; i++) {
-            this._board.push(Piece.EMPTY);
+    constructor();
+    constructor(g: Game);
+    constructor(g?: any) {
+        if (g) {
+            for (let i = 0; i < g._board.length; i++) {
+                this._board.push(g._board[i]);
+            }
+            this._turn = g._turn;
+            this._width = g._width;
+            this._height = g._height;
+        } else {
+            for (let i: number = 0; i < this._width * this._height; i++) {
+                this._board.push(Piece.EMPTY);
+            }
         }
-
     }
 
+    //#region getters
     get width() {
         return this._width;
     }
@@ -27,6 +37,16 @@ class Game {
         return this._height;
     }
 
+    get board() {
+        return this._board;
+    }
+
+    get turn() {
+        return this._turn;
+    }
+    //#endregion getters
+
+    //#region private methods
     private index(col: number, row: number): number {
         if (0 <= col && col < this._width && 0 <= row && row < this._height) {
             return (row * this._width) + col;
@@ -44,50 +64,7 @@ class Game {
         }
     }
 
-    public printBoard() {
-        let builder: Array<Array<Piece>> = [];
-        let r: Array<string> = [];
-        let temp;
-        for (let i = 0; i < this._width * this._height; i += this._width) {
-            temp = this._board.slice(i, i + this._width);
-            // padding to make the edge columns have "|" on them
-            builder.push([Piece.EMPTY, ...temp, Piece.EMPTY]);
-            r[i / this._width] = builder[i / this._width].join("|")
-        }
-        return r.reverse().join("\n");
-    }
-
-    set board(b: Array<Piece>) {
-        // setting board by value. not by reference
-        this._board = []
-        for (let i = 0; i < b.length; i++) {
-            this._board.push(b[i]);
-        }
-    }
-
-    get board() {
-        return this._board;
-    }
-
-    public placePiece(col: number): void {
-        // make sure choice is in range
-        if (0 <= col && col < this._width) {
-            // find the lowest spot on this row
-            let lowestSpot = 0
-            for (let row = 0; row < this._height; row++) {
-                if (this._board[this.index(col, row)] !== Piece.EMPTY) {
-                    lowestSpot = row + 1;
-                }
-            }
-            let i = this.index(col, lowestSpot)
-            if (0 <= i && i < this._board.length) {
-                this._board[i] = this._turn ? Piece.BLACK : Piece.WHITE;
-            }
-            this._turn = !this._turn; // Next players turn
-        }
-    }
-
-    public lookFor4(col: number, row: number): Piece {
+    private lookFor4(col: number, row: number): Piece {
         let count: number = 0;
         let firstPiece: Piece = this._board[this.index(col, row)]
         // let coords: Array<[number, number]> = []
@@ -123,6 +100,44 @@ class Game {
 
         return Piece.EMPTY;
     }
+    //#endregion private methods
+
+    //#region public methods
+    public toString() {
+        let builder: Array<Array<Piece>> = [];
+        let r: Array<string> = [];
+        let temp;
+        for (let i = 0; i < this._width * this._height; i += this._width) {
+            temp = this._board.slice(i, i + this._width);
+            // padding to make the edge columns have "|" on them
+            builder.push([Piece.EMPTY, ...temp, Piece.EMPTY]);
+            r[i / this._width] = builder[i / this._width].join("|")
+        }
+        return r.reverse().join("\n");
+    }
+
+    public placePiece(col: number): void {
+        // make sure choice is in range
+        if (0 <= col && col < this._width) {
+            // find the lowest spot on this row
+            let lowestSpot = 0
+            for (let row = 0; row < this._height; row++) {
+                if (this._board[this.index(col, row)] !== Piece.EMPTY) {
+                    lowestSpot = row + 1;
+                }
+            }
+            let i = this.index(col, lowestSpot)
+            if (0 <= i && i < this._board.length) {
+                this._board[i] = this._turn ? Piece.BLACK : Piece.WHITE;
+                this._turn = !this._turn; // Next players turn
+            }
+        }
+    }
+
+    public canPlaceInCol(col: number): boolean {
+        // see if you can place a piece in that column
+        return this._board[this.index(col, this.height - 1)] === Piece.EMPTY;
+    }
 
     public checkWin(): Piece {
         let win: boolean = false;
@@ -137,90 +152,115 @@ class Game {
         }
         return Piece.EMPTY;
     }
+    //#endregion public methods
+
 }
 
 class AI {
 
-    public think(node: Game, maximizingPlayer: boolean = true): number {
-        // Given a game returns the best move to make in the form of a column
-        let g = new Game();
-        g.board = node.board; // make a copy so the original game doesn't get changed
-        let bestscore: number = -Infinity, bestmove: number;
-
-        if (g.checkWin()) {
+    private minimax(node: Game, depth: number = 6): number {
+        if (depth == 0 || node.checkWin() !== Piece.EMPTY) {
             return this.heuristic(node);
         }
 
-        let score;
+        let score = 0;
+        const newNode = new Game(node);
+        let maximizingPlayer: boolean = newNode.turn;
 
         if (maximizingPlayer) {
             score = -Infinity;
-            for (let choice = 0; choice < node.width; choice++) {
-                g.placePiece(choice);
-                score = this.heuristic(g) + Math.max(score, this.think(g, false));
-                if (!bestscore || score > bestscore) {
-                    bestscore = score;
-                    bestmove = choice;
+            for (var possibleMove = 0; possibleMove < newNode.width; possibleMove++) {
+                if (newNode.canPlaceInCol(possibleMove)) {
+                    newNode.placePiece(possibleMove);
+                    score = this.heuristic(newNode) + Math.max(score, this.minimax(newNode, depth - 1));
                 }
             }
         } else {
             score = Infinity;
-            for (let choice = 0; choice < node.width; choice++) {
-                g.placePiece(choice);
-                score = this.heuristic(g) + Math.min(score, this.think(g, true));
+            for (var possibleMove = 0; possibleMove < newNode.width; possibleMove++) {
+                if (newNode.canPlaceInCol(possibleMove)) {
+                    newNode.placePiece(possibleMove);
+                    score = this.heuristic(newNode) + Math.min(score, this.minimax(newNode, depth - 1));
+                }
             }
         }
-
 
         return score;
     }
 
-    public heuristic(node: Game): number {
-        // Question? is the AI black or white?
+    public think(node: Game): number {
+        let bestMove: number = -1;
+        let bestScore: number = -Infinity;
 
-        let value = 0;
+        for (let move = 0; move < node.width; move++) {
+            let possibleNextMove = new Game(node);
+            possibleNextMove.placePiece(move);
+            let score = this.minimax(possibleNextMove);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+            console.log(score);
+        }
+
+        return bestMove;
+
+    }
+
+    public heuristic(node: Game): number {
+        // heuristic is for when the AI is playing with the black pieces
         let p = node.checkWin();
         switch (p) {
             case Piece.BLACK:
-                return -1;
-            case Piece.WHITE:
                 return 1;
+            case Piece.WHITE:
+                return 2;
             case Piece.EMPTY:
-                return 0;
+                return -1;
         }
 
-        return value;
     }
 
 }
 
 const readlinesync = require("readline-sync");
 
-
+// Player is white. Player goes first
 let game = new Game();
 let answer: number;
 let computer = new AI();
 
-for (let i = 0; i < 80; i++) {
+for (let i = 0; i < game.width * game.height; i++) {
 
-    console.log(game.printBoard());
-    // game.placePiece(Math.floor(Math.random() * game.width));
-    answer = Number.parseInt(readlinesync.question("Where would you like to place a piece? (1-10)\n"));
-    game.placePiece(answer - 1);
-    // if (i % 2 == 0) {
-    //     answer = Number.parseInt(readlinesync.question("Where would you like to place a piece? (1-10)\n"));
-    //     game.placePiece(answer - 1);
-    // } else {
-    //     answer = computer.think(game, 5, false);
-    //     game.placePiece(answer)
-    // }
+    console.log(game.toString());
 
-    if (game.checkWin()) {
-        console.log("WINNER");
-        console.log(game.printBoard());
-        break;
+    if (i % 2 == 0) {
+        var res = readlinesync.question(`Where would you like to place a piece? (0-${game.width - 1})\n`);
+
+        answer = Number.parseInt(res);
+        // answer = Math.floor(Math.random() * game.width);
+
+        if (0 <= answer && answer < game.width && game.canPlaceInCol(answer)) {
+            console.log("placing your piece");
+            game.placePiece(answer);
+        } else {
+            console.log(`Pick a number between 0 and ${game.width - 1}`);
+            i--;
+        }
     } else {
-        console.log("no winner yet!");
+        console.log("AI is thinking");
+        answer = computer.think(game);
+        console.log(`done thinking. AI chose ${answer}`);
+        game.placePiece(answer)
+        console.log(`your turn!`);
+
+    }
+
+    let winner: Piece = game.checkWin();
+    if (winner !== Piece.EMPTY) {
+        console.log(`THE WINNER IS ${winner}`);
+        console.log(game.toString());
+        break;
     }
 }
 

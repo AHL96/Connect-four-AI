@@ -3,4 +3,5 @@
 1. git clone https://github.com/AHL96/Connect-four-AI
 2. cd Connect-four-AI/
 3. npm i
-4. npm start
+4. npm run-script build
+5. node lib/index.js
